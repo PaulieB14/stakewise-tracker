@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html, body { background: #0a0e1a; color: #e6ecf5; }
+body { font-feature-settings: "cv02","cv03","cv04","cv11"; }
+
+::selection { background: rgba(124, 92, 255, 0.35); }
+
+.glow {
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.15),
+              0 12px 40px -10px rgba(124, 92, 255, 0.35);
+}
