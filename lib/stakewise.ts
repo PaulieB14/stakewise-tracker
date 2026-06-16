@@ -477,8 +477,18 @@ export function formatAssets(wei: bigint, decimals = 18, maxFractionDigits = 4):
 }
 
 export function weiToNumber(wei: bigint, decimals = 18): number {
-  const s = formatAssets(wei, decimals, 6);
-  return parseFloat(s);
+  // Direct bigint → number conversion. Avoids going through formatAssets,
+  // which adds comma thousand-separators (since v0.2.1) — parseFloat stops
+  // at the first comma, silently truncating "27,325.76" to "27" and
+  // wrecking every downstream USD calc for whale stakes (>=1,000 native).
+  if (wei === 0n) return 0;
+  const sign = wei < 0n ? -1 : 1;
+  const abs = wei < 0n ? -wei : wei;
+  const base = 10n ** BigInt(decimals);
+  const whole = Number(abs / base);
+  // 6-digit fractional part is plenty for USD math at any realistic price.
+  const fracStr = (abs % base).toString().padStart(decimals, "0").slice(0, 6);
+  return sign * (whole + Number(fracStr) / 1_000_000);
 }
 
 // ── formatNative — adaptive native-asset display ─────────────────────────────
