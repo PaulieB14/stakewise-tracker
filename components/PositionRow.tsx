@@ -1,13 +1,18 @@
-import { VaultPosition, formatAssets, nativeSymbol, explorerAddress } from "@/lib/stakewise";
+import { Sparkline } from "@/components/Sparkline";
+import { WithdrawalStatus } from "@/components/WithdrawalStatus";
+import { Prices, formatUsd, priceForNetwork } from "@/lib/prices";
+import { VaultPosition, explorerAddress, formatAssets, nativeSymbol, weiToNumber } from "@/lib/stakewise";
 
-export function PositionRow({ p, address }: { p: VaultPosition; address: string }) {
+export function PositionRow({ p, address, prices }: { p: VaultPosition; address: string; prices: Prices }) {
   const sym = nativeSymbol(p.network);
+  const price = priceForNetwork(prices, p.network);
   const stake = formatAssets(p.assets);
+  const stakeUsd = price > 0 ? weiToNumber(p.assets) * price : 0;
   const earned = formatAssets(p.totalEarnedAssets);
+  const earnedUsd = price > 0 ? weiToNumber(p.totalEarnedAssets) * price : 0;
   const earnedStake = formatAssets(p.totalStakeEarnedAssets);
   const earnedBoost = formatAssets(p.totalBoostEarnedAssets);
   const osTokenMinted = formatAssets(p.mintedOsTokenShares);
-  const exiting = formatAssets(p.exitingAssets);
   const sharePct = p.shareOfVault * 100;
   const stakewiseVaultUrl = `https://app.stakewise.io/vault/${p.network}/${p.vault.id}`;
 
@@ -37,46 +42,35 @@ export function PositionRow({ p, address }: { p: VaultPosition; address: string 
           </div>
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Cell label={`Stake (${sym})`} value={stake} primary />
-            <Cell label={`Earned total (${sym})`} value={earned} accentColor="text-accent2" />
-            <Cell label={`from stake / boost`} value={`${earnedStake} / ${earnedBoost}`} mono />
+            <Cell label={`Stake (${sym})`} value={stake} usd={stakeUsd} primary />
+            <Cell label={`Earned total (${sym})`} value={earned} usd={earnedUsd} accentColor="text-accent2" />
+            <Cell label="stake / boost" value={`${earnedStake} / ${earnedBoost}`} mono />
             <Cell label="Share of vault" value={`${sharePct < 0.0001 ? "<0.0001" : sharePct.toFixed(4)}%`} />
+          </div>
+
+          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wide text-dim">30d earnings</span>
+              <Sparkline snapshots={p.snapshots} days={30} />
+            </div>
+            <div className="text-xs text-muted">
+              Vault APY range: <span className="text-text">{p.vault.baseApy.toFixed(2)}%</span> → <span className="text-accent">{p.vault.maxBoostApy.toFixed(2)}%</span>
+            </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted">
             <Tag>{p.vault.isPrivate ? "Private" : "Public"}</Tag>
             {p.vault.isErc20 && <Tag>ERC-20</Tag>}
-            {p.exitingAssets > 0n && <Tag color="text-warn">Exiting: {exiting} {sym}</Tag>}
             {p.mintedOsTokenShares > 0n && <Tag>osToken minted: {osTokenMinted}</Tag>}
-            <span className="text-dim">·</span>
-            <span>Vault APY range: <span className="text-text">{p.vault.baseApy.toFixed(2)}%</span> – <span className="text-accent">{p.vault.maxBoostApy.toFixed(2)}%</span> (with boost)</span>
+            {p.exitingAssets > 0n && <Tag color="text-warn">Exiting: {formatAssets(p.exitingAssets)} {sym}</Tag>}
           </div>
 
+          <WithdrawalStatus requests={p.exitRequests} network={p.network} vaultId={p.vault.id} />
+
           <div className="mt-3 flex flex-wrap gap-3 text-xs">
-            <a
-              className="text-accent hover:underline"
-              href={stakewiseVaultUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open in StakeWise ↗
-            </a>
-            <a
-              className="text-muted hover:text-text underline-offset-2 hover:underline"
-              href={explorerAddress(p.network, p.vault.id)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Vault on explorer ↗
-            </a>
-            <a
-              className="text-muted hover:text-text underline-offset-2 hover:underline"
-              href={explorerAddress(p.network, address)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Your tx history ↗
-            </a>
+            <a className="text-accent hover:underline" href={stakewiseVaultUrl} target="_blank" rel="noopener noreferrer">Open in StakeWise ↗</a>
+            <a className="text-muted hover:text-text underline-offset-2 hover:underline" href={explorerAddress(p.network, p.vault.id)} target="_blank" rel="noopener noreferrer">Vault on explorer ↗</a>
+            <a className="text-muted hover:text-text underline-offset-2 hover:underline" href={explorerAddress(p.network, address)} target="_blank" rel="noopener noreferrer">Your tx history ↗</a>
           </div>
         </div>
       </div>
@@ -84,13 +78,16 @@ export function PositionRow({ p, address }: { p: VaultPosition; address: string 
   );
 }
 
-function Cell({ label, value, primary, accentColor, mono }: { label: string; value: string; primary?: boolean; accentColor?: string; mono?: boolean }) {
+function Cell({ label, value, usd, primary, accentColor, mono }: { label: string; value: string; usd?: number; primary?: boolean; accentColor?: string; mono?: boolean }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wide text-dim">{label}</div>
       <div className={`${primary ? "text-base font-bold" : "text-sm font-medium"} ${accentColor ?? "text-text"} ${mono ? "font-mono" : ""} tabular-nums`}>
         {value}
       </div>
+      {usd !== undefined && usd > 0 && (
+        <div className="text-[10px] text-dim tabular-nums">{formatUsd(usd)}</div>
+      )}
     </div>
   );
 }

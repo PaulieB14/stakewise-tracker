@@ -4,14 +4,81 @@
 
 :root {
   color-scheme: dark;
+  --eth-purple: #7c5cff;
+  --eth-purple-dark: #4b2fc9;
+  --eth-teal: #2dd4bf;
+  --eth-blue: #5b8dee;
 }
 
-html, body { background: #0a0e1a; color: #e6ecf5; }
-body { font-feature-settings: "cv02","cv03","cv04","cv11"; }
+html, body {
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(124, 92, 255, 0.18), transparent 60%),
+    radial-gradient(900px 500px at -10% 30%, rgba(45, 212, 191, 0.10), transparent 55%),
+    radial-gradient(900px 500px at 110% 70%, rgba(91, 141, 238, 0.12), transparent 55%),
+    #060912;
+  color: #e6ecf5;
+  font-feature-settings: "cv02","cv03","cv04","cv11";
+}
 
 ::selection { background: rgba(124, 92, 255, 0.35); }
 
+/* Glassy / premium card surface */
+.glass {
+  background:
+    linear-gradient(180deg, rgba(23, 32, 51, 0.65) 0%, rgba(13, 18, 32, 0.65) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(124, 92, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
 .glow {
-  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.15),
-              0 12px 40px -10px rgba(124, 92, 255, 0.35);
+  box-shadow:
+    0 0 0 1px rgba(124, 92, 255, 0.18),
+    0 24px 64px -16px rgba(124, 92, 255, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #ffffff 0%, #c9b8ff 40%, #7c5cff 70%, #2dd4bf 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.hairline {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Subtle border-only animation for the headline card */
+@keyframes shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.shimmer-border {
+  position: relative;
+}
+.shimmer-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background:
+    conic-gradient(from 0deg,
+      rgba(124, 92, 255, 0.5), rgba(45, 212, 191, 0.5),
+      rgba(91, 141, 238, 0.5), rgba(124, 92, 255, 0.5));
+  background-size: 200% 200%;
+  animation: shimmer 8s linear infinite;
+  z-index: -1;
+  filter: blur(8px);
+  opacity: 0.45;
+}
+
+.diamond {
+  /* ETH-style isometric diamond using CSS only */
+  width: 32px; height: 32px;
+  background: linear-gradient(135deg, #7c5cff 0%, #5b8dee 60%, #2dd4bf 100%);
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }

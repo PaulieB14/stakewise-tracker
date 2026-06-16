@@ -1,3 +1,4 @@
+import { Prices, formatUsd, priceForNetwork } from "@/lib/prices";
 import { VaultPosition, formatAssets, nativeSymbol, weiToNumber } from "@/lib/stakewise";
 
 function sumBy<T>(rows: T[], pick: (r: T) => bigint): bigint {
@@ -15,8 +16,7 @@ function weightedApy(rows: VaultPosition[]): number {
   return totalAssets > 0 ? weighted / totalAssets : 0;
 }
 
-export function SummaryHero({ positions }: { positions: VaultPosition[] }) {
-  // Per-network sub-totals.
+export function SummaryHero({ positions, prices }: { positions: VaultPosition[]; prices: Prices }) {
   const networks = Array.from(new Set(positions.map((p) => p.network)));
 
   return (
@@ -24,11 +24,14 @@ export function SummaryHero({ positions }: { positions: VaultPosition[] }) {
       {networks.map((net) => {
         const rows = positions.filter((p) => p.network === net);
         const sym = nativeSymbol(net);
+        const price = priceForNetwork(prices, net);
         const totalStake = sumBy(rows, (p) => p.assets);
         const totalEarned = sumBy(rows, (p) => p.totalEarnedAssets);
         const earnedFromStake = sumBy(rows, (p) => p.totalStakeEarnedAssets);
         const earnedFromBoost = sumBy(rows, (p) => p.totalBoostEarnedAssets);
         const apy = weightedApy(rows);
+        const totalStakeUsd = price > 0 ? weiToNumber(totalStake) * price : 0;
+        const totalEarnedUsd = price > 0 ? weiToNumber(totalEarned) * price : 0;
         return (
           <div key={net} className="rounded-2xl border border-border/60 bg-gradient-to-b from-panel to-bg p-5 glow">
             <div className="flex items-center justify-between">
@@ -36,8 +39,8 @@ export function SummaryHero({ positions }: { positions: VaultPosition[] }) {
               <div className="text-xs text-dim">weighted APY <span className="text-accent2 font-semibold">{apy.toFixed(2)}%</span></div>
             </div>
             <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Stat label={`Total stake (${sym})`} value={formatAssets(totalStake)} accent />
-              <Stat label={`Lifetime earned (${sym})`} value={formatAssets(totalEarned)} accentColor="text-accent2" />
+              <Stat label={`Total stake (${sym})`} value={formatAssets(totalStake)} usd={totalStakeUsd} accent />
+              <Stat label={`Lifetime earned (${sym})`} value={formatAssets(totalEarned)} usd={totalEarnedUsd} accentColor="text-accent2" />
               <Stat label={`from stake (${sym})`} value={formatAssets(earnedFromStake)} small />
               <Stat label={`from boost (${sym})`} value={formatAssets(earnedFromBoost)} small />
             </div>
@@ -51,13 +54,16 @@ export function SummaryHero({ positions }: { positions: VaultPosition[] }) {
   );
 }
 
-function Stat({ label, value, accent, accentColor, small }: { label: string; value: string; accent?: boolean; accentColor?: string; small?: boolean }) {
+function Stat({ label, value, usd, accent, accentColor, small }: { label: string; value: string; usd?: number; accent?: boolean; accentColor?: string; small?: boolean }) {
   return (
     <div>
       <div className={small ? "text-xs text-dim" : "text-xs text-muted"}>{label}</div>
-      <div className={`${small ? "text-base font-medium" : "text-2xl font-bold"} ${accentColor ?? (accent ? "text-text" : "text-text")} tabular-nums`}>
+      <div className={`${small ? "text-base font-medium" : "text-2xl font-bold"} ${accentColor ?? "text-text"} tabular-nums`}>
         {value}
       </div>
+      {usd !== undefined && usd > 0 && (
+        <div className="text-[11px] text-dim tabular-nums">{formatUsd(usd)}</div>
+      )}
     </div>
   );
 }

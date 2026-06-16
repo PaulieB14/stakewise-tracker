@@ -1,6 +1,10 @@
 import { AddressForm } from "@/components/AddressForm";
+import { AlertsCard } from "@/components/AlertsCard";
+import { CsvDownload } from "@/components/CsvDownload";
 import { PositionRow } from "@/components/PositionRow";
 import { SummaryHero } from "@/components/SummaryHero";
+import { reverseEns } from "@/lib/ens";
+import { fetchPrices } from "@/lib/prices";
 import { fetchAllPositions, isValidAddress } from "@/lib/stakewise";
 import { notFound } from "next/navigation";
 
@@ -8,53 +12,76 @@ export const revalidate = 60;
 
 export default async function WalletPage({ params }: { params: Promise<{ address: string }> }) {
   const { address: raw } = await params;
-  const address = decodeURIComponent(raw);
+  const address = decodeURIComponent(raw).toLowerCase();
   if (!isValidAddress(address)) notFound();
 
-  const positions = await fetchAllPositions(address);
-  const lower = address.toLowerCase();
+  const [positions, prices, ensName] = await Promise.all([
+    fetchAllPositions(address),
+    fetchPrices(),
+    reverseEns(address).catch(() => null),
+  ]);
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <div className="text-xs text-dim uppercase tracking-wide">Wallet</div>
-          <div className="font-mono text-sm sm:text-base break-all">{lower}</div>
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[11px] uppercase tracking-wider text-dim">Wallet</div>
+          {ensName ? (
+            <>
+              <div className="text-xl sm:text-2xl font-bold tracking-tight gradient-text">{ensName}</div>
+              <div className="text-xs text-dim font-mono truncate">{address}</div>
+            </>
+          ) : (
+            <div className="text-base sm:text-lg font-mono break-all">{address}</div>
+          )}
         </div>
         <div className="sm:max-w-sm w-full">
-          <AddressForm defaultValue={lower} />
+          <div className="rounded-xl glass p-2">
+            <AddressForm defaultValue={ensName || address} />
+          </div>
         </div>
       </div>
 
-      <SummaryHero positions={positions} />
+      <SummaryHero positions={positions} prices={prices} />
 
       {positions.length === 0 ? (
-        <EmptyState address={lower} />
+        <EmptyState address={address} />
       ) : (
         <section>
-          <h2 className="text-lg font-semibold mb-3">
+          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
             {positions.length} active position{positions.length === 1 ? "" : "s"}
+            <span className="text-xs font-normal text-dim">
+              · prices as of {new Date(prices.asOf).toUTCString().split(" ").slice(1, 5).join(" ")} UTC
+            </span>
           </h2>
           <div className="space-y-3">
             {positions.map((p) => (
-              <PositionRow key={`${p.network}-${p.vault.id}`} p={p} address={lower} />
+              <PositionRow key={`${p.network}-${p.vault.id}`} p={p} address={address} prices={prices} />
             ))}
           </div>
         </section>
       )}
 
-      <details className="text-xs text-dim border-t border-border/40 pt-6">
+      <div className="grid lg:grid-cols-2 gap-4">
+        <AlertsCard address={address} />
+        <CsvDownload address={address} />
+      </div>
+
+      <details className="text-xs text-dim border-t border-white/[0.06] pt-6">
         <summary className="cursor-pointer hover:text-muted">How this works</summary>
-        <div className="mt-2 space-y-1">
+        <div className="mt-2 space-y-1.5">
           <p>
             One GraphQL query per network against StakeWise's own graph nodes
-            (<code className="text-accent2">graphs.stakewise.io</code>) — Mainnet + Gnosis fetched in parallel.
-            Results cached 60s. No wallet connect, no signing, no API key, no data stored.
+            (<code className="text-accent2">graphs.stakewise.io</code>). Mainnet + Gnosis fetched in
+            parallel, cached 60s. No wallet connect, no signing, no API key, no data stored.
           </p>
           <p>
-            <strong>Earned</strong> = lifetime base staking + boost yield in the native asset.
-            <strong> APY</strong> is your current personalized APY for that vault including any leverage boost.
-            <strong> Share</strong> = your stake ÷ vault total assets.
+            <strong>Earned</strong> = lifetime base staking yield + boost yield in the native asset.
+            <strong> Your APY</strong> includes any active leverage boost.
+            <strong> 30d sparklines</strong> are built from daily AllocatorSnapshot entities.
+            <strong> Withdrawal status</strong> tracks open ExitRequest queue position + ETA.
+            <strong> USD</strong> is current Coingecko spot — for tax-accurate per-tx pricing, use the
+            CSV export which includes snapshot timestamps.
           </p>
         </div>
       </details>
@@ -64,22 +91,22 @@ export default async function WalletPage({ params }: { params: Promise<{ address
 
 function EmptyState({ address }: { address: string }) {
   return (
-    <section className="rounded-xl border border-border/60 bg-panel/40 p-6 text-center">
-      <div className="text-2xl">🪹</div>
-      <div className="mt-2 font-semibold">No active StakeWise positions found</div>
-      <p className="mt-1 text-sm text-muted">
+    <section className="rounded-2xl glass p-8 text-center">
+      <div className="text-3xl">🪹</div>
+      <div className="mt-3 font-semibold text-lg">No active StakeWise positions found</div>
+      <p className="mt-1.5 text-sm text-muted max-w-md mx-auto">
         We checked every public vault on Mainnet and Gnosis and didn't find a stake from{" "}
         <span className="font-mono">{address.slice(0, 6)}…{address.slice(-4)}</span>.
       </p>
-      <p className="mt-2 text-xs text-dim">
-        This is "active stake" only — if you've fully withdrawn or only hold osETH/osGNO
-        liquid tokens, they won't appear here.
+      <p className="mt-2 text-xs text-dim max-w-md mx-auto">
+        This is <em>active stake</em> only. If you've fully withdrawn or only hold liquid
+        osETH/osGNO, those won't show here.
       </p>
       <a
         href="https://app.stakewise.io/vaults"
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-4 inline-block rounded-md bg-accent text-bg px-4 py-2 text-sm font-semibold hover:brightness-110"
+        className="mt-5 inline-block rounded-lg bg-accent text-white px-4 py-2 text-sm font-semibold hover:brightness-110"
       >
         Browse vaults on StakeWise ↗
       </a>
