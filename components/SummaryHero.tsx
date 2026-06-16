@@ -16,6 +16,30 @@ function weightedApy(rows: VaultPosition[]): number {
   return totalAssets > 0 ? weighted / totalAssets : 0;
 }
 
+// Sum across all positions' last-24h snapshots. Snapshots are oldest -> newest.
+function sumLast24hWei(rows: VaultPosition[]): bigint {
+  const cutoff = Math.floor(Date.now() / 1000) - 86400;
+  let total = 0n;
+  for (const r of rows) {
+    for (const s of r.snapshots) {
+      if (s.timestamp >= cutoff) total += s.earnedAssets;
+    }
+  }
+  return total;
+}
+
+// APY-based projection: stake * apy/100 / 365 in native asset units.
+// Operates in wei to preserve precision; result is wei per day.
+function projectedDailyWei(rows: VaultPosition[]): bigint {
+  let dailyWei = 0n;
+  for (const r of rows) {
+    // (stake * apyBp) / 365 / 10000 where apyBp = apy * 100 (basis points).
+    const apyBp = BigInt(Math.round(r.apy * 100));
+    dailyWei += (r.assets * apyBp) / 365n / 10_000n;
+  }
+  return dailyWei;
+}
+
 export function SummaryHero({ positions, prices }: { positions: VaultPosition[]; prices: Prices }) {
   const networks = Array.from(new Set(positions.map((p) => p.network)));
 
@@ -30,39 +54,92 @@ export function SummaryHero({ positions, prices }: { positions: VaultPosition[];
         const earnedFromStake = sumBy(rows, (p) => p.totalStakeEarnedAssets);
         const earnedFromBoost = sumBy(rows, (p) => p.totalBoostEarnedAssets);
         const apy = weightedApy(rows);
+        const last24 = sumLast24hWei(rows);
+        const projDaily = projectedDailyWei(rows);
         const totalStakeUsd = price > 0 ? weiToNumber(totalStake) * price : 0;
         const totalEarnedUsd = price > 0 ? weiToNumber(totalEarned) * price : 0;
+        const last24Usd = price > 0 ? weiToNumber(last24) * price : 0;
+        const projDailyUsd = price > 0 ? weiToNumber(projDaily) * price : 0;
         return (
-          <div key={net} className="rounded-2xl border border-border/60 bg-gradient-to-b from-panel to-bg p-5 glow">
-            <div className="flex items-center justify-between">
-              <div className="text-xs uppercase tracking-wide text-muted">{net} · {rows.length} vault{rows.length===1?"":"s"}</div>
-              <div className="text-xs text-dim">weighted APY <span className="text-accent2 font-semibold">{apy.toFixed(2)}%</span></div>
+          <div key={net} className="rounded-2xl glass p-6 glow">
+            {/* Header: network + APY (white, not teal — saving teal for realized) */}
+            <div className="flex flex-wrap items-center gap-y-1 mb-5">
+              <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">
+                {net} · {rows.length} vault{rows.length === 1 ? "" : "s"}
+              </div>
+              <div className="ml-auto text-xs text-dim">
+                weighted APY <span className="text-text font-semibold tabular-nums">{apy.toFixed(2)}%</span>
+              </div>
             </div>
-            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Stat label={`Total stake (${sym})`} value={formatAssets(totalStake)} usd={totalStakeUsd} accent />
-              <Stat label={`Lifetime earned (${sym})`} value={formatAssets(totalEarned)} usd={totalEarnedUsd} accentColor="text-accent2" />
-              <Stat label={`from stake (${sym})`} value={formatAssets(earnedFromStake)} small />
-              <Stat label={`from boost (${sym})`} value={formatAssets(earnedFromBoost)} small />
+
+            {/* 4-col grid: 2 hero KPIs + 2 supporting */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-5">
+              <Hero
+                label={`Total stake (${sym})`}
+                value={formatAssets(totalStake)}
+                usd={totalStakeUsd}
+              />
+              <Hero
+                label={`Lifetime earned (${sym})`}
+                value={formatAssets(totalEarned)}
+                usd={totalEarnedUsd}
+                accent
+                subtitle={
+                  earnedFromStake > 0n || earnedFromBoost > 0n
+                    ? `stake ${formatAssets(earnedFromStake)} · boost ${formatAssets(earnedFromBoost)}`
+                    : undefined
+                }
+              />
+              <Support
+                label={`Earning/day (${sym})`}
+                value={formatAssets(projDaily, 18, 5)}
+                usd={projDailyUsd}
+                hint="projected · APY × stake / 365"
+              />
+              <Support
+                label={`Last 24h (${sym})`}
+                value={formatAssets(last24, 18, 5)}
+                usd={last24Usd}
+                hint={last24 > 0n ? "↑ realized" : "no snapshot yet"}
+                positive={last24 > 0n}
+              />
             </div>
           </div>
         );
       })}
-      {positions.length > 0 && networks.length === 0 && (
-        <div className="text-xs text-dim">No positions to summarize.</div>
-      )}
     </section>
   );
 }
 
-function Stat({ label, value, usd, accent, accentColor, small }: { label: string; value: string; usd?: number; accent?: boolean; accentColor?: string; small?: boolean }) {
+function Hero({ label, value, usd, accent, subtitle }: { label: string; value: string; usd: number; accent?: boolean; subtitle?: string }) {
   return (
-    <div>
-      <div className={small ? "text-xs text-dim" : "text-xs text-muted"}>{label}</div>
-      <div className={`${small ? "text-base font-medium" : "text-3xl font-bold"} ${accentColor ?? "text-text"} tabular-nums leading-tight`}>
+    <div className="sm:col-span-1 sm:border-l-0">
+      <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">{label}</div>
+      <div className={`text-4xl sm:text-5xl font-bold tracking-tight tabular-nums leading-none mt-1.5 ${accent ? "text-accent2" : "text-text"}`}>
         {value}
       </div>
-      {usd !== undefined && usd > 0 && (
-        <div className={`${small ? "text-xs" : "text-base"} text-muted/90 font-medium tabular-nums mt-0.5`}>{formatUsd(usd)}</div>
+      {usd > 0 && (
+        <div className="text-base text-muted font-medium tabular-nums mt-1.5">{formatUsd(usd)}</div>
+      )}
+      {subtitle && (
+        <div className="text-[11px] text-dim font-mono tabular-nums mt-1">{subtitle}</div>
+      )}
+    </div>
+  );
+}
+
+function Support({ label, value, usd, hint, positive }: { label: string; value: string; usd: number; hint?: string; positive?: boolean }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">{label}</div>
+      <div className={`text-xl font-semibold tracking-tight tabular-nums leading-none mt-1.5 ${positive ? "text-accent2" : "text-text"}`}>
+        {value}
+      </div>
+      {usd > 0 && (
+        <div className="text-sm text-muted tabular-nums mt-1">{formatUsd(usd)}</div>
+      )}
+      {hint && (
+        <div className="text-[11px] text-dim mt-1">{hint}</div>
       )}
     </div>
   );

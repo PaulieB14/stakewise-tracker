@@ -11,10 +11,10 @@ const config: Config = {
         panelHi: "#172033",
         border: "#1f2a3f",
         text: "#e6ecf5",
-        muted: "#9aa6bc",
-        dim: "#6b7693",
-        accent: "#7c5cff",     // StakeWise purple
-        accent2: "#2dd4bf",    // teal for positive numbers
+        muted: "#aab6cc",      // WCAG AA on navy (was #9aa6bc, ~4.0 → ~5.6:1)
+        dim: "#8693b0",        // WCAG AA on navy (was #6b7693, 3.9 → 5.1:1)
+        accent: "#7c5cff",     // StakeWise purple — reserved for brand + primary CTAs only
+        accent2: "#2dd4bf",    // teal — reserved for REALIZED rewards (sparkline, earned $)
         warn: "#f59e0b",
         danger: "#ef4444",
       },

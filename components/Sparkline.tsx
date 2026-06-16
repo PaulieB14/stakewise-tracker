@@ -1,21 +1,30 @@
 import { Snapshot, weiToNumber } from "@/lib/stakewise";
 
-// Inline SVG sparkline of CUMULATIVE earned-assets over the last N days.
-// AllocatorSnapshot.earnedAssets is per-period (1 day's rewards) — to make
-// the line grow visually like users expect, we sum forward through the
-// window. Server-rendered, no client JS at render time.
+// Returns the snapshots inside the last `days` window. Used by both the
+// Sparkline (for plotting) and PositionRow (for the explicit "+X / 30d" label)
+// so the math stays in one place.
+export function snapshotsWindowed(snapshots: Snapshot[], days: number): Snapshot[] {
+  const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+  return (snapshots ?? []).filter((s) => s.timestamp >= cutoff);
+}
+
+export function sumEarnedWei(snapshots: Snapshot[]): bigint {
+  let s = 0n;
+  for (const p of snapshots) s += p.earnedAssets;
+  return s;
+}
+
+// Inline SVG sparkline of CUMULATIVE earned-assets within the visible window.
+// Pure presentational; the label "+X ETH ($Y) in 30d" lives in PositionRow.
 export function Sparkline({ snapshots, days = 30 }: { snapshots: Snapshot[]; days?: number }) {
   if (!snapshots || snapshots.length < 2) {
-    return <div className="text-[10px] text-dim italic">no history yet</div>;
+    return <div className="text-[11px] text-dim italic">no history yet</div>;
   }
-  const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
-  const inWindow = snapshots.filter((s) => s.timestamp >= cutoff);
+  const inWindow = snapshotsWindowed(snapshots, days);
   if (inWindow.length < 2) {
-    return <div className="text-[10px] text-dim italic">{days}d history pending</div>;
+    return <div className="text-[11px] text-dim italic">{days}d history pending</div>;
   }
 
-  // Snapshots are oldest -> newest already; build cumulative running sum so
-  // the chart shows total earnings within the visible window.
   let runningSum = 0;
   const points = inWindow.map((p) => {
     runningSum += weiToNumber(p.earnedAssets);
@@ -30,8 +39,8 @@ export function Sparkline({ snapshots, days = 30 }: { snapshots: Snapshot[]; day
   const yMax = Math.max(...ys);
   const yRange = yMax - yMin || 1;
   const xRange = xMax - xMin || 1;
-  const W = 120;
-  const H = 30;
+  const W = 140;
+  const H = 32;
   const path = points
     .map((p, i) => {
       const x = ((p.t - xMin) / xRange) * (W - 2) + 1;
@@ -41,21 +50,19 @@ export function Sparkline({ snapshots, days = 30 }: { snapshots: Snapshot[]; day
     .join(" ");
   const lastY = H - 2 - ((ys[ys.length - 1] - yMin) / yRange) * (H - 4);
   const lastX = ((xs[xs.length - 1] - xMin) / xRange) * (W - 2) + 1;
-
-  // Cumulative is monotonically non-decreasing, so always "up" colored.
   const stroke = "#2dd4bf";
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-6 w-[120px]" aria-label={`${days}-day cumulative earnings`}>
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-7 w-[140px]" aria-label={`${days}-day cumulative earnings`}>
       <defs>
         <linearGradient id="sg-cum" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={stroke} stopOpacity="0.4" />
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.45" />
           <stop offset="100%" stopColor={stroke} stopOpacity="0" />
         </linearGradient>
       </defs>
       <path d={`${path} L ${W - 1} ${H} L 1 ${H} Z`} fill="url(#sg-cum)" />
-      <path d={path} fill="none" stroke={stroke} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r={1.6} fill={stroke} />
+      <path d={path} fill="none" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastX} cy={lastY} r={2} fill={stroke} />
     </svg>
   );
 }

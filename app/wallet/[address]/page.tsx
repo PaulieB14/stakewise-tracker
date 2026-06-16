@@ -3,6 +3,7 @@ import { AlertsCard } from "@/components/AlertsCard";
 import { CsvDownload } from "@/components/CsvDownload";
 import { PositionRow } from "@/components/PositionRow";
 import { SummaryHero } from "@/components/SummaryHero";
+import { WithdrawalBanner } from "@/components/WithdrawalBanner";
 import { reverseEns } from "@/lib/ens";
 import { fetchPrices, formatUsd } from "@/lib/prices";
 import { fetchAllPositions, isValidAddress } from "@/lib/stakewise";
@@ -21,18 +22,23 @@ export default async function WalletPage({ params }: { params: Promise<{ address
     reverseEns(address).catch(() => null),
   ]);
 
+  const asOfStale =
+    prices.asOf && Date.now() - new Date(prices.asOf).getTime() > 10 * 60 * 1000;
+  const hasGnosis = positions.some((p) => p.network === "gnosis");
+
   return (
     <div className="space-y-8">
+      {/* Wallet header — ENS as plain semibold (not gradient), address inline */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-[11px] uppercase tracking-wider text-dim">Wallet</div>
+          <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">Wallet</div>
           {ensName ? (
-            <>
-              <div className="text-xl sm:text-2xl font-bold tracking-tight gradient-text">{ensName}</div>
-              <div className="text-xs text-dim font-mono truncate">{address}</div>
-            </>
+            <div className="mt-1 flex flex-wrap items-baseline gap-2">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-text">{ensName}</h1>
+              <span className="text-xs text-dim font-mono tabular-nums">{address.slice(0, 8)}…{address.slice(-6)}</span>
+            </div>
           ) : (
-            <div className="text-base sm:text-lg font-mono break-all">{address}</div>
+            <h1 className="text-base sm:text-lg font-mono break-all mt-1">{address}</h1>
           )}
         </div>
         <div className="sm:max-w-sm w-full">
@@ -41,6 +47,9 @@ export default async function WalletPage({ params }: { params: Promise<{ address
           </div>
         </div>
       </div>
+
+      {/* Sticky withdrawal banner — only renders if there's anything claimable or pending */}
+      <WithdrawalBanner positions={positions} />
 
       <SummaryHero positions={positions} prices={prices} />
 
@@ -52,19 +61,19 @@ export default async function WalletPage({ params }: { params: Promise<{ address
             <h2 className="text-lg font-semibold">
               {positions.length} active position{positions.length === 1 ? "" : "s"}
             </h2>
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-2 text-xs">
               {prices.ethUsd > 0 && (
-                <span className="rounded-full bg-panel/80 border border-white/[0.06] px-2.5 py-1 font-mono tabular-nums">
-                  <span className="text-muted">ETH</span> <span className="text-text font-semibold">{formatUsd(prices.ethUsd)}</span>
+                <span className="rounded-md bg-panel/80 border border-white/[0.06] px-2.5 py-1 font-mono tabular-nums">
+                  <span className="text-dim">ETH</span> <span className="text-text font-semibold">{formatUsd(prices.ethUsd)}</span>
                 </span>
               )}
-              {prices.gnoUsd > 0 && positions.some(p => p.network === "gnosis") && (
-                <span className="rounded-full bg-panel/80 border border-white/[0.06] px-2.5 py-1 font-mono tabular-nums">
-                  <span className="text-muted">GNO</span> <span className="text-text font-semibold">{formatUsd(prices.gnoUsd)}</span>
+              {prices.gnoUsd > 0 && hasGnosis && (
+                <span className="rounded-md bg-panel/80 border border-white/[0.06] px-2.5 py-1 font-mono tabular-nums">
+                  <span className="text-dim">GNO</span> <span className="text-text font-semibold">{formatUsd(prices.gnoUsd)}</span>
                 </span>
               )}
-              <span className="text-dim">
-                {new Date(prices.asOf).toUTCString().split(" ").slice(1, 5).join(" ")} UTC · {prices.source}
+              <span className={`text-[11px] ${asOfStale ? "text-warn" : "text-dim"}`}>
+                {asOfStale ? "stale · " : ""}via {prices.source}
               </span>
             </div>
           </div>
@@ -90,12 +99,12 @@ export default async function WalletPage({ params }: { params: Promise<{ address
             parallel, cached 60s. No wallet connect, no signing, no API key, no data stored.
           </p>
           <p>
-            <strong>Earned</strong> = lifetime base staking yield + boost yield in the native asset.
-            <strong> Your APY</strong> includes any active leverage boost.
-            <strong> 30d sparklines</strong> are built from daily AllocatorSnapshot entities.
-            <strong> Withdrawal status</strong> tracks open ExitRequest queue position + ETA.
-            <strong> USD</strong> is current Coingecko spot — for tax-accurate per-tx pricing, use the
-            CSV export which includes snapshot timestamps.
+            <strong>Earning/day</strong> is a projection: your stake × current APY ÷ 365.
+            <strong> Last 24h</strong> sums the last day's <code>AllocatorSnapshot.earnedAssets</code> across all
+            your positions on that network (realized, not projected).
+            <strong> 30d sparklines</strong> are cumulative running sums within the visible window.
+            <strong> USD</strong> is spot from Coingecko (with Coinbase fallback) — for tax-accurate
+            per-tx pricing, use the CSV export which includes snapshot timestamps.
           </p>
         </div>
       </details>

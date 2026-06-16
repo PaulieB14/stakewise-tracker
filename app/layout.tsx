@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { HeaderPriceChip } from "@/components/HeaderPriceChip";
 import { Logo } from "@/components/Logo";
 import "./globals.css";
 
@@ -27,11 +28,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <span className="text-[11px] text-dim hidden sm:inline">multi-vault · multi-network</span>
               </div>
             </a>
-            <nav className="text-xs text-muted flex items-center gap-5">
-              <a href="https://app.stakewise.io" target="_blank" rel="noopener noreferrer" className="hover:text-text transition">
+            <nav className="text-xs text-muted flex items-center gap-3 sm:gap-5">
+              <HeaderPriceChip />
+              <a href="https://app.stakewise.io" target="_blank" rel="noopener noreferrer" className="hover:text-text transition hidden sm:inline">
                 StakeWise app ↗
               </a>
-              <a href="https://docs.stakewise.io" target="_blank" rel="noopener noreferrer" className="hover:text-text transition">
+              <a href="https://docs.stakewise.io" target="_blank" rel="noopener noreferrer" className="hover:text-text transition hidden sm:inline">
                 Docs ↗
               </a>
               <a href="https://github.com/PaulieB14/stakewise-tracker" target="_blank" rel="noopener noreferrer" className="hover:text-text transition">
