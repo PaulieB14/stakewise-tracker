@@ -4,15 +4,22 @@ import { Logo } from "@/components/Logo";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://stakewise-tracker.vercel.app"),
   title: "StakeWise Tracker — every vault, one view",
   description:
-    "Independent multi-vault dashboard for StakeWise V3 stakers. Paste any wallet → every position across Mainnet + Gnosis: stake, lifetime rewards, APY, osETH minted, share of TVL, withdrawal status. ETH-coded. Read-only.",
+    "Multi-vault dashboard for StakeWise V3 stakers. Paste any wallet — see every position on Mainnet + Gnosis. Read-only, no wallet connect.",
   openGraph: {
     title: "StakeWise Tracker",
     description: "Every StakeWise V3 vault you're staking in, one view.",
     type: "website",
+    siteName: "StakeWise Tracker",
+    url: "https://stakewise-tracker.vercel.app",
   },
-  twitter: { card: "summary_large_image" },
+  twitter: {
+    card: "summary_large_image",
+    title: "StakeWise Tracker — every vault, one view",
+    description: "Multi-vault dashboard for StakeWise V3 stakers.",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
