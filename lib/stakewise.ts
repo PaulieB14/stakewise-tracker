@@ -317,6 +317,137 @@ export const fetchAllPositions = cache(async (address: string): Promise<VaultPos
   return out;
 });
 
+// ── Per-vault activity + leaderboard ────────────────────────────────────────
+//
+// One composed query per (network, vault, user) returns:
+//  - top 50 allocators ordered by stake desc (for the leaderboard)
+//  - last 50 AllocatorActions for the user in this vault (for tx history)
+//  - vault privacy flags so the leaderboard can suppress itself on private vaults
+//
+// Subgraph's `Timestamp` scalar was used for snapshots (microseconds) but the
+// activity entities use plain BigInt seconds — no conversion needed.
+
+export interface StakerRow {
+  address: string;
+  assets: bigint;
+}
+
+export type ActionType =
+  | "Deposited"
+  | "Redeemed"
+  | "Withdrew"
+  | "ExitQueueEntered"
+  | "ExitedAssetsClaimed"
+  | "OsTokenMinted"
+  | "OsTokenBurned"
+  | "OsTokenLiquidated"
+  | "OsTokenRedeemed"
+  | "BoostDeposited"
+  | "BoostExitQueueEntered"
+  | "BoostExitedAssetsClaimed"
+  | string;
+
+export interface ActivityEvent {
+  hash: string;
+  actionType: ActionType;
+  assets: bigint;
+  shares: bigint;
+  timestamp: number; // seconds
+}
+
+export interface VaultActivity {
+  totalAllocatorCount: number; // best-effort from the top-N scan (caps at 1000)
+  isPrivate: boolean;
+  leaderboard: StakerRow[]; // ordered desc by assets
+  userRank: number | null;  // 1-indexed; null if user not staking
+  userAssets: bigint;
+  events: ActivityEvent[];   // newest first
+}
+
+const VAULT_ACTIVITY_QUERY = `
+  query VaultActivity($vault: ID!, $user: Bytes!) {
+    vault(id: $vault) {
+      id displayName isPrivate isBlocklist whitelister totalAssets
+      topAllocators: allocators(first: 50, orderBy: assets, orderDirection: desc, where: { assets_gt: "100000000000000" }) {
+        address assets
+      }
+      sampleCount: allocators(first: 1000, where: { assets_gt: "100000000000000" }) { id }
+    }
+    activity: allocatorActions(
+      first: 50
+      where: { vault: $vault, address: $user }
+      orderBy: createdAt
+      orderDirection: desc
+    ) {
+      hash actionType assets shares createdAt
+    }
+  }
+`;
+
+export async function fetchVaultActivity(
+  network: Network,
+  vaultId: string,
+  userAddress: string,
+): Promise<VaultActivity> {
+  const data = await fetchSubgraph<{
+    vault: {
+      isPrivate: boolean;
+      topAllocators: Array<{ address: string; assets: string }>;
+      sampleCount: Array<{ id: string }>;
+    } | null;
+    activity: Array<{
+      hash: string;
+      actionType: string;
+      assets: string;
+      shares: string;
+      createdAt: string;
+    }>;
+  }>(network, VAULT_ACTIVITY_QUERY, {
+    vault: vaultId.toLowerCase(),
+    user: userAddress.toLowerCase(),
+  });
+
+  if (!data.vault) {
+    return {
+      totalAllocatorCount: 0,
+      isPrivate: false,
+      leaderboard: [],
+      userRank: null,
+      userAssets: 0n,
+      events: [],
+    };
+  }
+
+  const leaderboard: StakerRow[] = data.vault.topAllocators.map((a) => ({
+    address: a.address.toLowerCase(),
+    assets: bigOr0(a.assets),
+  }));
+
+  const userLower = userAddress.toLowerCase();
+  let userRank: number | null = null;
+  let userAssets = 0n;
+  const idx = leaderboard.findIndex((r) => r.address === userLower);
+  if (idx >= 0) {
+    userRank = idx + 1;
+    userAssets = leaderboard[idx].assets;
+  }
+
+  return {
+    totalAllocatorCount: data.vault.sampleCount.length,
+    isPrivate: !!data.vault.isPrivate,
+    leaderboard,
+    userRank,
+    userAssets,
+    events: data.activity.map((e) => ({
+      hash: e.hash,
+      actionType: e.actionType,
+      assets: bigOr0(e.assets),
+      shares: bigOr0(e.shares),
+      timestamp: parseInt(e.createdAt || "0", 10),
+    })),
+  };
+}
+
 export function nativeSymbol(network: Network): string {
   return ENDPOINTS[network].native.symbol;
 }

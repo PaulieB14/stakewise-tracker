@@ -1,4 +1,5 @@
 import { Sparkline, snapshotsWindowed, sumEarnedWei } from "@/components/Sparkline";
+import { VaultActivity } from "@/components/VaultActivity";
 import { WithdrawalStatus } from "@/components/WithdrawalStatus";
 import { Prices, formatUsd, priceForNetwork } from "@/lib/prices";
 import { VaultPosition, explorerAddress, formatAssets, formatNative, nativeSymbol, weiToNumber } from "@/lib/stakewise";
@@ -122,6 +123,13 @@ export function PositionRow({ p, address, prices }: { p: VaultPosition; address:
           </div>
 
           <WithdrawalStatus requests={p.exitRequests} network={p.network} vaultId={p.vault.id} />
+
+          <VaultActivity
+            network={p.network}
+            vaultId={p.vault.id}
+            vaultTotalAssets={p.vault.totalAssets}
+            userAddress={address}
+          />
 
           <div className="mt-3 flex flex-wrap gap-3 text-xs">
             <a className="text-accent hover:underline font-medium" href={stakewiseVaultUrl} target="_blank" rel="noopener noreferrer">Open in StakeWise ↗</a>
