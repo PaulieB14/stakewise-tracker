@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { HeaderPriceChip } from "@/components/HeaderPriceChip";
 import { Logo } from "@/components/Logo";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-screen antialiased">
+        <Providers>
         <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#060912]/70 backdrop-blur-xl">
           <div className="mx-auto max-w-6xl px-4 py-3.5 flex items-center justify-between">
             <a href="/" className="flex items-center gap-2.5 group">
@@ -60,8 +62,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             (<a href="https://graphs.stakewise.io" className="underline decoration-dotted underline-offset-2 hover:text-text">graphs.stakewise.io</a>).
             Not affiliated with StakeWise.
           </p>
-          <p className="text-dim/70">Read-only · no wallet connect · no signing · no analytics.</p>
+          <p className="text-dim/70">Read-only · optional wallet connect for auto-fill · no signing · no analytics.</p>
         </footer>
+        </Providers>
       </body>
     </html>
   );

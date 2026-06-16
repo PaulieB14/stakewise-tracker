@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { ConnectWallet } from "@/components/ConnectWallet";
 
 export function AddressForm({ defaultValue = "", autoFocus = false }: { defaultValue?: string; autoFocus?: boolean }) {
   const router = useRouter();
@@ -42,8 +43,15 @@ export function AddressForm({ defaultValue = "", autoFocus = false }: { defaultV
   }
 
   return (
-    <form onSubmit={submit} className="flex gap-2">
-      <input
+    <div className="space-y-3">
+      <ConnectWallet onAddress={(a) => start(() => router.push(`/wallet/${a.toLowerCase()}`))} />
+      <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.12em] text-dim/80">
+        <span className="h-px flex-1 bg-white/[0.06]" />
+        <span>or paste an address</span>
+        <span className="h-px flex-1 bg-white/[0.06]" />
+      </div>
+      <form onSubmit={submit} className="flex gap-2">
+        <input
         type="text"
         inputMode="text"
         placeholder="0x… or vitalik.eth"
@@ -62,7 +70,8 @@ export function AddressForm({ defaultValue = "", autoFocus = false }: { defaultV
       >
         {pending ? "…" : "Look up"}
       </button>
-      {err ? <div className="absolute mt-14 text-xs text-danger">{err}</div> : null}
-    </form>
+        {err ? <div className="absolute mt-14 text-xs text-danger">{err}</div> : null}
+      </form>
+    </div>
   );
 }
