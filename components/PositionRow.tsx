@@ -82,11 +82,11 @@ function Cell({ label, value, usd, primary, accentColor, mono }: { label: string
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wide text-dim">{label}</div>
-      <div className={`${primary ? "text-base font-bold" : "text-sm font-medium"} ${accentColor ?? "text-text"} ${mono ? "font-mono" : ""} tabular-nums`}>
+      <div className={`${primary ? "text-xl font-bold" : "text-base font-semibold"} ${accentColor ?? "text-text"} ${mono ? "font-mono" : ""} tabular-nums leading-tight`}>
         {value}
       </div>
       {usd !== undefined && usd > 0 && (
-        <div className="text-[10px] text-dim tabular-nums">{formatUsd(usd)}</div>
+        <div className="text-sm text-muted/90 font-medium tabular-nums mt-0.5">{formatUsd(usd)}</div>
       )}
     </div>
   );

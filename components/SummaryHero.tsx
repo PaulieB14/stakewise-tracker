@@ -58,11 +58,11 @@ function Stat({ label, value, usd, accent, accentColor, small }: { label: string
   return (
     <div>
       <div className={small ? "text-xs text-dim" : "text-xs text-muted"}>{label}</div>
-      <div className={`${small ? "text-base font-medium" : "text-2xl font-bold"} ${accentColor ?? "text-text"} tabular-nums`}>
+      <div className={`${small ? "text-base font-medium" : "text-3xl font-bold"} ${accentColor ?? "text-text"} tabular-nums leading-tight`}>
         {value}
       </div>
       {usd !== undefined && usd > 0 && (
-        <div className="text-[11px] text-dim tabular-nums">{formatUsd(usd)}</div>
+        <div className={`${small ? "text-xs" : "text-base"} text-muted/90 font-medium tabular-nums mt-0.5`}>{formatUsd(usd)}</div>
       )}
     </div>
   );

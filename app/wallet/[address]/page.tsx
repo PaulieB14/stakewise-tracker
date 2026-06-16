@@ -4,7 +4,7 @@ import { CsvDownload } from "@/components/CsvDownload";
 import { PositionRow } from "@/components/PositionRow";
 import { SummaryHero } from "@/components/SummaryHero";
 import { reverseEns } from "@/lib/ens";
-import { fetchPrices } from "@/lib/prices";
+import { fetchPrices, formatUsd } from "@/lib/prices";
 import { fetchAllPositions, isValidAddress } from "@/lib/stakewise";
 import { notFound } from "next/navigation";
 
@@ -48,12 +48,26 @@ export default async function WalletPage({ params }: { params: Promise<{ address
         <EmptyState address={address} />
       ) : (
         <section>
-          <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
-            {positions.length} active position{positions.length === 1 ? "" : "s"}
-            <span className="text-xs font-normal text-dim">
-              · prices as of {new Date(prices.asOf).toUTCString().split(" ").slice(1, 5).join(" ")} UTC
-            </span>
-          </h2>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">
+              {positions.length} active position{positions.length === 1 ? "" : "s"}
+            </h2>
+            <div className="flex items-center gap-3 text-xs">
+              {prices.ethUsd > 0 && (
+                <span className="rounded-full bg-panel/80 border border-white/[0.06] px-2.5 py-1 font-mono tabular-nums">
+                  <span className="text-muted">ETH</span> <span className="text-text font-semibold">{formatUsd(prices.ethUsd)}</span>
+                </span>
+              )}
+              {prices.gnoUsd > 0 && positions.some(p => p.network === "gnosis") && (
+                <span className="rounded-full bg-panel/80 border border-white/[0.06] px-2.5 py-1 font-mono tabular-nums">
+                  <span className="text-muted">GNO</span> <span className="text-text font-semibold">{formatUsd(prices.gnoUsd)}</span>
+                </span>
+              )}
+              <span className="text-dim">
+                {new Date(prices.asOf).toUTCString().split(" ").slice(1, 5).join(" ")} UTC · {prices.source}
+              </span>
+            </div>
+          </div>
           <div className="space-y-3">
             {positions.map((p) => (
               <PositionRow key={`${p.network}-${p.vault.id}`} p={p} address={address} prices={prices} />
