@@ -73,38 +73,38 @@ export function PositionRow({ p, address, prices }: { p: VaultPosition; address:
             <Cell label="Share of vault" value={`${sharePct < 0.0001 ? "<0.0001" : sharePct.toFixed(4)}%`} />
           </div>
 
-          {/* 30d sparkline + explicit delta label + base/boost range */}
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div>
-                <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">30d earnings</div>
+          {/* 30d sparkline row — chart + bold delta on left; APY range on right */}
+          <div className="mt-5 pt-4 border-t border-white/[0.04] flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-dim">30d earnings</span>
                 <Sparkline snapshots={p.snapshots} days={30} />
               </div>
               {window30.length >= 2 ? (
-                <div className="text-xs tabular-nums">
-                  <div className="text-accent2 font-semibold">
+                <div className="text-xs tabular-nums flex flex-col gap-0.5">
+                  <span className="text-accent2 font-bold text-sm">
                     +{formatAssets(sum30Wei, 18, 4)} {sym}
-                    {sum30Usd > 0 && <span className="text-muted font-medium"> ({formatUsd(sum30Usd)})</span>}
-                  </div>
-                  <div className="text-dim mt-0.5">~{formatAssets(sum30PerDayWei, 18, 5)} /day{sum30PerDayUsd > 0 ? ` (${formatUsd(sum30PerDayUsd)})` : ""}</div>
+                  </span>
+                  {sum30Usd > 0 && (
+                    <span className="text-muted text-xs">{formatUsd(sum30Usd)} · ~{formatUsd(sum30PerDayUsd)}/day</span>
+                  )}
                 </div>
               ) : null}
             </div>
-            <div className="text-xs text-muted tabular-nums">
-              <span className="text-dim">Base </span>
-              <span className="text-text font-semibold">{p.vault.baseApy.toFixed(2)}%</span>
-              {hasBoost ? (
-                <>
-                  <span className="text-dim mx-1">·</span>
-                  <span className="text-dim">Max w/ boost </span>
-                  <span className="text-accent font-semibold">{p.vault.maxBoostApy.toFixed(2)}%</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-dim mx-1">·</span>
-                  <span className="text-dim">No boost available</span>
-                </>
-              )}
+            <div className="text-xs tabular-nums text-right">
+              <div className="text-[10px] uppercase tracking-[0.1em] font-medium text-dim">APY range</div>
+              <div className="mt-1">
+                <span className="text-dim">Base </span>
+                <span className="text-text font-semibold">{p.vault.baseApy.toFixed(2)}%</span>
+                {hasBoost && (
+                  <>
+                    <span className="text-dim mx-1.5">→</span>
+                    <span className="text-accent font-semibold">{p.vault.maxBoostApy.toFixed(2)}%</span>
+                    <span className="text-dim ml-1">max w/ boost</span>
+                  </>
+                )}
+                {!hasBoost && <span className="text-dim ml-1.5">· no boost</span>}
+              </div>
             </div>
           </div>
 
@@ -144,16 +144,28 @@ function Cell({ label, value, usd, primary, accentColor }: { label: string; valu
 
 // Stake yield in white, boost yield in purple — establishes the
 // base=white / boost=purple / earned=teal semantic across the page.
+// Renders "base only" when boost = 0 to avoid the awkward "583 / 0" display.
 function SplitCell({ label, base, boost, hasBoost, sym }: { label: string; base: string; boost: string; hasBoost: boolean; sym: string }) {
   return (
     <div>
       <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">{label}</div>
-      <div className="mt-1 flex items-baseline gap-1.5 text-base font-semibold tabular-nums leading-tight">
-        <span className="text-text">{base}</span>
-        <span className="text-dim/70 text-sm">/</span>
-        <span className={hasBoost ? "text-accent" : "text-dim"}>{boost}</span>
-      </div>
-      <div className="text-[11px] text-dim mt-0.5 font-mono">{sym} · base / boost</div>
+      {hasBoost ? (
+        <>
+          <div className="mt-1 flex items-baseline gap-1.5 text-base font-semibold tabular-nums leading-tight">
+            <span className="text-text">{base}</span>
+            <span className="text-dim/70 text-sm">/</span>
+            <span className="text-accent">{boost}</span>
+          </div>
+          <div className="text-[11px] text-dim mt-0.5 font-mono">{sym} · base / boost</div>
+        </>
+      ) : (
+        <>
+          <div className="mt-1 text-base font-semibold tabular-nums leading-tight text-text">
+            {base}
+          </div>
+          <div className="text-[11px] text-dim mt-0.5 font-mono">{sym} · base only</div>
+        </>
+      )}
     </div>
   );
 }

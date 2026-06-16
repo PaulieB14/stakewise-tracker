@@ -85,22 +85,24 @@ export function SummaryHero({ positions, prices }: { positions: VaultPosition[];
                 usd={totalEarnedUsd}
                 accent
                 subtitle={
-                  earnedFromStake > 0n || earnedFromBoost > 0n
+                  earnedFromBoost > 0n
                     ? `stake ${formatAssets(earnedFromStake)} · boost ${formatAssets(earnedFromBoost)}`
-                    : undefined
+                    : earnedFromStake > 0n
+                      ? `base only · no boost active`
+                      : undefined
                 }
               />
               <Support
                 label={`Earning/day (${sym})`}
-                value={formatAssets(projDaily, 18, 5)}
+                value={projDaily > 0n ? formatAssets(projDaily, 18, 5) : "—"}
                 usd={projDailyUsd}
                 hint="projected · APY × stake / 365"
               />
               <Support
                 label={`Last 24h (${sym})`}
-                value={formatAssets(last24, 18, 5)}
+                value={last24 > 0n ? formatAssets(last24, 18, 5) : "—"}
                 usd={last24Usd}
-                hint={last24 > 0n ? "↑ realized" : "no snapshot yet"}
+                hint={last24 > 0n ? "realized" : "snapshot pending"}
                 positive={last24 > 0n}
               />
             </div>

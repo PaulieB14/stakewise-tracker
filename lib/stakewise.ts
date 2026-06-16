@@ -336,11 +336,13 @@ export function formatAssets(wei: bigint, decimals = 18, maxFractionDigits = 4):
   const base = 10n ** BigInt(decimals);
   const whole = abs / base;
   const frac = abs % base;
-  if (frac === 0n) return `${sign}${whole.toString()}`;
+  // Comma thousands separator for readability — 27323.837 -> 27,323.837
+  const wholeFormatted = whole.toLocaleString("en-US");
+  if (frac === 0n) return `${sign}${wholeFormatted}`;
   let fracStr = frac.toString().padStart(decimals, "0");
   fracStr = fracStr.slice(0, maxFractionDigits).replace(/0+$/, "");
-  if (!fracStr) return `${sign}${whole.toString()}`;
-  return `${sign}${whole.toString()}.${fracStr}`;
+  if (!fracStr) return `${sign}${wholeFormatted}`;
+  return `${sign}${wholeFormatted}.${fracStr}`;
 }
 
 export function weiToNumber(wei: bigint, decimals = 18): number {
