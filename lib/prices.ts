@@ -1,45 +1,85 @@
-// Native-asset USD prices. Coingecko free /simple/price — no API key, generous
-// rate limit. Cached 5 min via React's server cache so a single render only
-// fires one network call regardless of how many position rows reference it.
+// Native-asset USD prices. Multi-source with fallback so a single rate-limit
+// on Coingecko doesn't blank out the entire dashboard's USD display.
 
 import { cache } from "react";
 import { Network } from "./stakewise";
 
-const COINGECKO_IDS: Record<Network, string> = {
-  mainnet: "ethereum",
-  gnosis: "xdai", // Gnosis Chain's native gas asset is xDai
-};
-
 export interface Prices {
-  ethUsd: number;   // ETH (mainnet native)
-  gnoUsd: number;   // xDai for gas; for display we use ETH-bridged value on Gnosis
-  asOf: string;     // ISO timestamp
+  ethUsd: number;
+  gnoUsd: number;
+  asOf: string;
+  source: string; // which provider answered ("coingecko" | "coinbase" | "env" | "none")
 }
 
-const FALLBACK: Prices = { ethUsd: 0, gnoUsd: 0, asOf: new Date(0).toISOString() };
+const FALLBACK: Prices = { ethUsd: 0, gnoUsd: 0, asOf: new Date(0).toISOString(), source: "none" };
 
-export const fetchPrices = cache(async (): Promise<Prices> => {
+async function fromCoingecko(): Promise<Prices | null> {
   try {
-    // Gnosis Chain staking is actually GNO-based via the V3 protocol, but the
-    // staked-asset accounting in the subgraph is denominated in `assets` units
-    // matching the vault's native token. Use ETH for Mainnet, GNO for Gnosis.
     const r = await fetch(
       "https://api.coingecko.com/api/v3/simple/price?ids=ethereum,gnosis&vs_currencies=usd",
       { next: { revalidate: 300 } },
     );
-    if (!r.ok) return FALLBACK;
-    const j = (await r.json()) as {
-      ethereum?: { usd?: number };
-      gnosis?: { usd?: number };
-    };
-    return {
-      ethUsd: j.ethereum?.usd ?? 0,
-      gnoUsd: j.gnosis?.usd ?? 0,
-      asOf: new Date().toISOString(),
-    };
+    if (!r.ok) return null;
+    const j = (await r.json()) as { ethereum?: { usd?: number }; gnosis?: { usd?: number } };
+    const ethUsd = j.ethereum?.usd ?? 0;
+    const gnoUsd = j.gnosis?.usd ?? 0;
+    if (!ethUsd && !gnoUsd) return null;
+    return { ethUsd, gnoUsd, asOf: new Date().toISOString(), source: "coingecko" };
   } catch {
-    return FALLBACK;
+    return null;
   }
+}
+
+async function fromCoinbase(): Promise<Prices | null> {
+  // Coinbase's free spot API returns string prices for any supported pair.
+  // No rate limit headaches; works as a robust fallback for the ETH side.
+  // (Gnosis isn't on Coinbase, so gnoUsd stays 0 unless Coingecko answered.)
+  try {
+    const [eth, gno] = await Promise.allSettled([
+      fetch("https://api.coinbase.com/v2/prices/ETH-USD/spot", { next: { revalidate: 300 } }).then((r) => r.json()),
+      fetch("https://api.coinbase.com/v2/prices/GNO-USD/spot", { next: { revalidate: 300 } }).then((r) => r.json()).catch(() => null),
+    ]);
+    let ethUsd = 0;
+    let gnoUsd = 0;
+    if (eth.status === "fulfilled") {
+      const v = parseFloat(eth.value?.data?.amount ?? "0");
+      if (Number.isFinite(v)) ethUsd = v;
+    }
+    if (gno.status === "fulfilled" && gno.value) {
+      const v = parseFloat(gno.value?.data?.amount ?? "0");
+      if (Number.isFinite(v)) gnoUsd = v;
+    }
+    if (!ethUsd && !gnoUsd) return null;
+    return { ethUsd, gnoUsd, asOf: new Date().toISOString(), source: "coinbase" };
+  } catch {
+    return null;
+  }
+}
+
+function fromEnv(): Prices | null {
+  // Last-resort manual price override. Useful for testing or when both
+  // primary feeds are misbehaving.
+  const ethUsd = parseFloat(process.env.FALLBACK_ETH_USD || "0");
+  const gnoUsd = parseFloat(process.env.FALLBACK_GNO_USD || "0");
+  if (!ethUsd && !gnoUsd) return null;
+  return { ethUsd, gnoUsd, asOf: new Date().toISOString(), source: "env" };
+}
+
+export const fetchPrices = cache(async (): Promise<Prices> => {
+  const cg = await fromCoingecko();
+  if (cg) return cg;
+  const cb = await fromCoinbase();
+  if (cb) {
+    // Stitch in Gnosis from a static fallback if Coinbase only gave us ETH.
+    if (!cb.gnoUsd) {
+      const env = fromEnv();
+      if (env?.gnoUsd) cb.gnoUsd = env.gnoUsd;
+    }
+    return cb;
+  }
+  const env = fromEnv();
+  if (env) return env;
+  return FALLBACK;
 });
 
 export function priceForNetwork(prices: Prices, network: Network): number {

@@ -129,11 +129,17 @@ interface RawAllocator {
 // Single composed query: allocators + the last 90 daily snapshots per
 // allocator + active exit requests. Subgraph supports nested filtered
 // children via `where` and `first` on @derivedFrom relations.
+// Exclude dust-only positions (< 0.0001 native asset). Withdrawn positions
+// often leave behind tiny wei balances that pass the assets_gt: "0" filter
+// but render as "stake: 0" in the UI and confuse users about what's actually
+// active. 0.0001 ETH ≈ $0.20 today — cleanly above wei-level dust.
+const DUST_THRESHOLD_WEI = "100000000000000"; // 1e14 wei = 0.0001 native asset
+
 const POSITIONS_QUERY = `
   query Positions($address: Bytes!) {
     allocators(
       first: 200
-      where: { address: $address, assets_gt: "0" }
+      where: { address: $address, assets_gt: "${DUST_THRESHOLD_WEI}" }
       orderBy: assets
       orderDirection: desc
     ) {
@@ -217,13 +223,23 @@ async function fetchNetworkPositions(network: Network, address: string): Promise
   }>(network, POSITIONS_QUERY, { address: normalizeAddress(address) });
 
   // Bucket snapshots and exit requests by vault id.
+  //
+  // Subgraph quirk: AllocatorSnapshot.timestamp uses the GraphQL `Timestamp`
+  // scalar which encodes microseconds (16-digit values like
+  // 1781481600000000), NOT seconds. Convert to seconds for sane date math.
+  // ExitRequest.timestamp + .withdrawalTimestamp use the standard BigInt
+  // scalar which is already seconds — DON'T divide those.
+  //
+  // Also: snapshot.earnedAssets is the rewards earned DURING that snapshot's
+  // period (1 day), not a cumulative total. Year-window math must sum these
+  // per-period values inside the window, not diff endpoints.
   const snapsByVault = new Map<string, Snapshot[]>();
   for (const s of data.snapshots || []) {
     const vid = s.allocator?.vault?.id?.toLowerCase();
     if (!vid) continue;
     const arr = snapsByVault.get(vid) ?? [];
     arr.push({
-      timestamp: Math.floor(parseFloat(s.timestamp)),
+      timestamp: Math.floor(parseFloat(s.timestamp) / 1_000_000),
       earnedAssets: bigOr0(s.earnedAssets),
       stakeEarnedAssets: bigOr0(s.stakeEarnedAssets),
       boostEarnedAssets: bigOr0(s.boostEarnedAssets),
@@ -334,36 +350,39 @@ export function weiToNumber(wei: bigint, decimals = 18): number {
 
 // ── Calendar-year earnings (CSV export) ──────────────────────────────────────
 //
-// Compute the user's earned-assets *delta* over the calendar year by diffing
-// the latest snapshot in the year vs the latest snapshot before the year
-// started. This is the tax-relevant "received this year" number — not the
-// vault's APY-times-balance projection.
+// AllocatorSnapshot.earnedAssets is per-period (one day's rewards), NOT a
+// cumulative total. Year-window earnings = sum of per-day earnings where
+// snapshot.timestamp falls inside the calendar year. Same for the
+// stake/boost split. snapshotCount tells the caller how many days actually
+// had snapshots in the window (sanity check — if 0, there's no data for
+// that year and the row should be flagged as such in the CSV).
 
 export interface YearlyEarnings {
   earned: bigint;
   fromStake: bigint;
   fromBoost: bigint;
-  startBalance: bigint;
-  endBalance: bigint;
+  snapshotCount: number;
+  firstSnapshot: number | null;  // seconds
+  lastSnapshot: number | null;
 }
 
-export function earningsInYear(snapshots: Snapshot[], year: number, currentTotalEarned: bigint, currentStake: bigint, currentBoost: bigint): YearlyEarnings {
+export function earningsInYear(snapshots: Snapshot[], year: number): YearlyEarnings {
   const yearStart = Math.floor(Date.UTC(year, 0, 1) / 1000);
   const yearEnd = Math.floor(Date.UTC(year + 1, 0, 1) / 1000);
-  // Snapshots are oldest -> newest.
-  const before = [...snapshots].reverse().find((s) => s.timestamp < yearStart);
-  const lastInYear = [...snapshots].reverse().find((s) => s.timestamp < yearEnd);
-  const startTotal = before?.earnedAssets ?? 0n;
-  const startStake = before?.stakeEarnedAssets ?? 0n;
-  const startBoost = before?.boostEarnedAssets ?? 0n;
-  const endTotal = lastInYear?.earnedAssets ?? currentTotalEarned;
-  const endStake = lastInYear?.stakeEarnedAssets ?? currentStake;
-  const endBoost = lastInYear?.boostEarnedAssets ?? currentBoost;
-  return {
-    earned: endTotal - startTotal,
-    fromStake: endStake - startStake,
-    fromBoost: endBoost - startBoost,
-    startBalance: startTotal,
-    endBalance: endTotal,
-  };
+  let earned = 0n;
+  let fromStake = 0n;
+  let fromBoost = 0n;
+  let snapshotCount = 0;
+  let firstSnapshot: number | null = null;
+  let lastSnapshot: number | null = null;
+  for (const s of snapshots) {
+    if (s.timestamp < yearStart || s.timestamp >= yearEnd) continue;
+    earned += s.earnedAssets;
+    fromStake += s.stakeEarnedAssets;
+    fromBoost += s.boostEarnedAssets;
+    snapshotCount++;
+    if (firstSnapshot === null || s.timestamp < firstSnapshot) firstSnapshot = s.timestamp;
+    if (lastSnapshot === null || s.timestamp > lastSnapshot) lastSnapshot = s.timestamp;
+  }
+  return { earned, fromStake, fromBoost, snapshotCount, firstSnapshot, lastSnapshot };
 }

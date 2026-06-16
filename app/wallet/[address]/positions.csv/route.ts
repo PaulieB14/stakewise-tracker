@@ -21,12 +21,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ addr
 
   const lines: string[] = [];
   if (inYearMode) {
-    lines.push("network,vault_id,vault_name,native_symbol,earned_in_year,from_stake_in_year,from_boost_in_year,earned_in_year_usd,year_start_balance,year_end_balance,price_used_usd");
+    lines.push("network,vault_id,vault_name,native_symbol,earned_in_year,from_stake_in_year,from_boost_in_year,earned_in_year_usd,snapshot_days_in_year,first_snapshot_iso,last_snapshot_iso,price_used_usd");
     for (const p of positions) {
       const sym = nativeSymbol(p.network);
-      const y = earningsInYear(p.snapshots, yearNum, p.totalEarnedAssets, p.totalStakeEarnedAssets, p.totalBoostEarnedAssets);
+      const y = earningsInYear(p.snapshots, yearNum);
       const price = priceForNetwork(prices, p.network);
       const earnedUsd = price > 0 ? weiToNumber(y.earned) * price : 0;
+      const firstIso = y.firstSnapshot ? new Date(y.firstSnapshot * 1000).toISOString() : "";
+      const lastIso = y.lastSnapshot ? new Date(y.lastSnapshot * 1000).toISOString() : "";
       lines.push([
         p.network,
         p.vault.id,
@@ -36,8 +38,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ addr
         formatAssets(y.fromStake, 18, 8),
         formatAssets(y.fromBoost, 18, 8),
         earnedUsd.toFixed(2),
-        formatAssets(y.startBalance, 18, 8),
-        formatAssets(y.endBalance, 18, 8),
+        y.snapshotCount.toString(),
+        firstIso,
+        lastIso,
         price.toFixed(2),
       ].join(","));
     }
