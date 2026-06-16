@@ -1,5 +1,5 @@
 import { Prices, formatUsd, priceForNetwork } from "@/lib/prices";
-import { VaultPosition, formatAssets, nativeSymbol, weiToNumber } from "@/lib/stakewise";
+import { VaultPosition, formatAssets, formatNative, nativeSymbol, weiToNumber } from "@/lib/stakewise";
 
 function sumBy<T>(rows: T[], pick: (r: T) => bigint): bigint {
   return rows.reduce((a, r) => a + pick(r), 0n);
@@ -72,21 +72,23 @@ export function SummaryHero({ positions, prices }: { positions: VaultPosition[];
               </div>
             </div>
 
-            {/* 4-col grid: 2 hero KPIs + 2 supporting */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-6 gap-y-5">
+            {/* 4-col grid: 2 hero KPIs + 2 supporting.
+                gap-x narrowed at small breakpoint and only relaxed at sm+ —
+                avoids tablet-portrait collision. */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-x-4 sm:gap-x-6 gap-y-5">
               <Hero
                 label={`Total stake (${sym})`}
-                value={formatAssets(totalStake)}
+                value={formatNative(totalStake, { mode: "hero" })}
                 usd={totalStakeUsd}
               />
               <Hero
                 label={`Lifetime earned (${sym})`}
-                value={formatAssets(totalEarned)}
+                value={formatNative(totalEarned, { mode: "hero" })}
                 usd={totalEarnedUsd}
                 accent
                 subtitle={
                   earnedFromBoost > 0n
-                    ? `stake ${formatAssets(earnedFromStake)} · boost ${formatAssets(earnedFromBoost)}`
+                    ? `stake ${formatNative(earnedFromStake, { mode: "compact" })} · boost ${formatNative(earnedFromBoost, { mode: "compact" })}`
                     : earnedFromStake > 0n
                       ? `base only · no boost active`
                       : undefined
@@ -94,13 +96,13 @@ export function SummaryHero({ positions, prices }: { positions: VaultPosition[];
               />
               <Support
                 label={`Earning/day (${sym})`}
-                value={projDaily > 0n ? formatAssets(projDaily, 18, 5) : "—"}
+                value={formatNative(projDaily, { mode: "rate", zeroPlaceholder: "—" })}
                 usd={projDailyUsd}
                 hint="projected · APY × stake / 365"
               />
               <Support
                 label={`Last 24h (${sym})`}
-                value={last24 > 0n ? formatAssets(last24, 18, 5) : "—"}
+                value={formatNative(last24, { mode: "rate", zeroPlaceholder: "—" })}
                 usd={last24Usd}
                 hint={last24 > 0n ? "realized" : "snapshot pending"}
                 positive={last24 > 0n}
@@ -115,16 +117,20 @@ export function SummaryHero({ positions, prices }: { positions: VaultPosition[];
 
 function Hero({ label, value, usd, accent, subtitle }: { label: string; value: string; usd: number; accent?: boolean; subtitle?: string }) {
   return (
-    <div className="sm:col-span-1 sm:border-l-0">
+    <div className="sm:col-span-1 sm:border-l-0 min-w-0">
       <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">{label}</div>
-      <div className={`text-4xl sm:text-5xl font-bold tracking-tight tabular-nums leading-none mt-1.5 ${accent ? "text-accent2" : "text-text"}`}>
+      {/* text-5xl only kicks in at lg (1024px+) — at sm/md (tablet portrait,
+          small laptops) the 4-col grid cells are 176-240px wide which can't
+          hold a "27,324.82" at 48px. Delay the jump so whales render cleanly
+          on tablets. */}
+      <div className={`text-4xl sm:text-4xl lg:text-5xl font-bold tracking-tight tabular-nums leading-none mt-1.5 overflow-hidden ${accent ? "text-accent2" : "text-text"}`}>
         {value}
       </div>
       {usd > 0 && (
         <div className="text-base text-muted font-medium tabular-nums mt-1.5">{formatUsd(usd)}</div>
       )}
       {subtitle && (
-        <div className="text-[11px] text-dim font-mono tabular-nums mt-1">{subtitle}</div>
+        <div className="text-[11px] text-dim font-mono tabular-nums mt-1 leading-tight">{subtitle}</div>
       )}
     </div>
   );
@@ -132,9 +138,9 @@ function Hero({ label, value, usd, accent, subtitle }: { label: string; value: s
 
 function Support({ label, value, usd, hint, positive }: { label: string; value: string; usd: number; hint?: string; positive?: boolean }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-[11px] uppercase tracking-[0.08em] font-medium text-dim">{label}</div>
-      <div className={`text-xl font-semibold tracking-tight tabular-nums leading-none mt-1.5 ${positive ? "text-accent2" : "text-text"}`}>
+      <div className={`text-xl font-semibold tracking-tight tabular-nums leading-none mt-1.5 overflow-hidden ${positive ? "text-accent2" : "text-text"}`}>
         {value}
       </div>
       {usd > 0 && (

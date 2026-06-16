@@ -1,8 +1,16 @@
 import { fetchPrices, priceForNetwork } from "@/lib/prices";
-import { VaultPosition, earningsInYear, fetchAllPositions, formatAssets, isValidAddress, nativeSymbol, weiToNumber } from "@/lib/stakewise";
+import { VaultPosition, earningsInYear, fetchAllPositions, formatNative, isValidAddress, nativeSymbol, weiToNumber } from "@/lib/stakewise";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+
+// ⚠️ CSV PRECISION IS LOAD-BEARING FOR TAX/ACCOUNTING ⚠️
+// All amount columns here use formatNative(wei, { mode: "csv" }) which
+// guarantees: fixed 8 decimals, no commas (would break CSV parsing!),
+// no k/M abbreviation, no trailing-zero trim. Rounding to the 8th decimal
+// is acceptable — sub-wei precision below 1e-8 ETH ($0.0000002) has no
+// tax meaning. Do NOT switch to any other formatNative mode — they all
+// add commas and/or trim digits in ways that destroy the audit trail.
 
 // /wallet/0x.../positions.csv               -> lifetime totals
 // /wallet/0x.../positions.csv?year=2026     -> just earnings inside that calendar year (tax-friendly)
@@ -34,9 +42,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ addr
         p.vault.id,
         csvField(p.vault.displayName),
         sym,
-        formatAssets(y.earned, 18, 8),
-        formatAssets(y.fromStake, 18, 8),
-        formatAssets(y.fromBoost, 18, 8),
+        formatNative(y.earned, { mode: "csv" }),
+        formatNative(y.fromStake, { mode: "csv" }),
+        formatNative(y.fromBoost, { mode: "csv" }),
         earnedUsd.toFixed(2),
         y.snapshotCount.toString(),
         firstIso,
@@ -56,17 +64,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ addr
         p.vault.id,
         csvField(p.vault.displayName),
         sym,
-        formatAssets(p.assets, 18, 8),
+        formatNative(p.assets, { mode: "csv" }),
         stakeUsd.toFixed(2),
-        formatAssets(p.totalEarnedAssets, 18, 8),
-        formatAssets(p.totalStakeEarnedAssets, 18, 8),
-        formatAssets(p.totalBoostEarnedAssets, 18, 8),
+        formatNative(p.totalEarnedAssets, { mode: "csv" }),
+        formatNative(p.totalStakeEarnedAssets, { mode: "csv" }),
+        formatNative(p.totalBoostEarnedAssets, { mode: "csv" }),
         earnedUsd.toFixed(2),
         p.apy.toFixed(4),
         p.vault.apy.toFixed(4),
         (p.shareOfVault * 100).toFixed(6),
-        formatAssets(p.exitingAssets, 18, 8),
-        formatAssets(p.mintedOsTokenShares, 18, 8),
+        formatNative(p.exitingAssets, { mode: "csv" }),
+        formatNative(p.mintedOsTokenShares, { mode: "csv" }),
         price.toFixed(2),
       ].join(","));
     }

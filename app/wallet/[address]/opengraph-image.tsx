@@ -1,5 +1,5 @@
 import { fetchPrices, formatUsd, priceForNetwork } from "@/lib/prices";
-import { fetchAllPositions, formatAssets, isValidAddress, nativeSymbol, weiToNumber } from "@/lib/stakewise";
+import { fetchAllPositions, formatNative, isValidAddress, nativeSymbol, weiToNumber } from "@/lib/stakewise";
 import { ImageResponse } from "next/og";
 
 export const runtime = "nodejs";
@@ -32,8 +32,12 @@ export default async function Image({ params }: { params: Promise<{ address: str
   // Pick the dominant network for the unit label.
   const primaryNet = positions[0]?.network ?? "mainnet";
   const primarySym = nativeSymbol(primaryNet);
-  const stakeStr = formatAssets(totalStake);
-  const earnedStr = formatAssets(totalEarned);
+  // OG card has no responsive escape — text-72px renders at a fixed PNG
+  // width. Hero mode k/M abbreviation above 100k is the only way to keep
+  // megawhale cards from clipping. Pure bigint + Intl so it works in the
+  // next/og edge runtime.
+  const stakeStr = formatNative(totalStake, { mode: "hero" });
+  const earnedStr = formatNative(totalEarned, { mode: "hero" });
 
   return new ImageResponse(
     (

@@ -1,18 +1,23 @@
 import { Sparkline, snapshotsWindowed, sumEarnedWei } from "@/components/Sparkline";
 import { WithdrawalStatus } from "@/components/WithdrawalStatus";
 import { Prices, formatUsd, priceForNetwork } from "@/lib/prices";
-import { VaultPosition, explorerAddress, formatAssets, nativeSymbol, weiToNumber } from "@/lib/stakewise";
+import { VaultPosition, explorerAddress, formatAssets, formatNative, nativeSymbol, weiToNumber } from "@/lib/stakewise";
 
 export function PositionRow({ p, address, prices }: { p: VaultPosition; address: string; prices: Prices }) {
   const sym = nativeSymbol(p.network);
   const price = priceForNetwork(prices, p.network);
-  const stake = formatAssets(p.assets);
+  // Primary Cells (stake + earned total) render at text-2xl in a 4-col grid;
+  // whales (27k ETH) overflow at default 4dp. compact mode caps decimals by
+  // magnitude — preserves dust precision on small positions, avoids the
+  // mash-up at scale.
+  const stake = formatNative(p.assets, { mode: "compact", zeroPlaceholder: "—" });
   const stakeUsd = price > 0 ? weiToNumber(p.assets) * price : 0;
-  const earned = formatAssets(p.totalEarnedAssets);
+  const earned = formatNative(p.totalEarnedAssets, { mode: "compact" });
   const earnedUsd = price > 0 ? weiToNumber(p.totalEarnedAssets) * price : 0;
+  // SplitCell stays on legacy formatAssets — narrow columns, no overflow risk.
   const earnedStake = formatAssets(p.totalStakeEarnedAssets);
   const earnedBoost = formatAssets(p.totalBoostEarnedAssets);
-  const osTokenMinted = formatAssets(p.mintedOsTokenShares);
+  const osTokenMinted = formatNative(p.mintedOsTokenShares, { mode: "compact" });
   const sharePct = p.shareOfVault * 100;
   const stakewiseVaultUrl = `https://app.stakewise.io/vault/${p.network}/${p.vault.id}`;
 
@@ -83,7 +88,7 @@ export function PositionRow({ p, address, prices }: { p: VaultPosition; address:
               {window30.length >= 2 ? (
                 <div className="text-xs tabular-nums flex flex-col gap-0.5">
                   <span className="text-accent2 font-bold text-sm">
-                    +{formatAssets(sum30Wei, 18, 4)} {sym}
+                    +{formatNative(sum30Wei, { mode: "compact", zeroPlaceholder: "—" })} {sym}
                   </span>
                   {sum30Usd > 0 && (
                     <span className="text-muted text-xs">{formatUsd(sum30Usd)} · ~{formatUsd(sum30PerDayUsd)}/day</span>
@@ -113,7 +118,7 @@ export function PositionRow({ p, address, prices }: { p: VaultPosition; address:
             <Tag>{p.vault.isPrivate ? "Private" : "Public"}</Tag>
             {p.vault.isErc20 && <Tag>ERC-20</Tag>}
             {p.mintedOsTokenShares > 0n && <Tag>osToken minted: {osTokenMinted}</Tag>}
-            {p.exitingAssets > 0n && <Tag color="text-warn">Exiting: {formatAssets(p.exitingAssets)} {sym}</Tag>}
+            {p.exitingAssets > 0n && <Tag color="text-warn">Exiting: {formatNative(p.exitingAssets, { mode: "compact" })} {sym}</Tag>}
           </div>
 
           <WithdrawalStatus requests={p.exitRequests} network={p.network} vaultId={p.vault.id} />

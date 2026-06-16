@@ -1,4 +1,4 @@
-import { ExitRequest, Network, formatAssets, nativeSymbol } from "@/lib/stakewise";
+import { ExitRequest, Network, formatNative, nativeSymbol } from "@/lib/stakewise";
 
 function fmtTimeAgo(seconds: number): string {
   if (!seconds) return "—";
@@ -41,8 +41,8 @@ export function WithdrawalStatus({ requests, network, vaultId }: { requests: Exi
       </div>
       <ul className="mt-2 space-y-1.5 text-xs">
         {active.slice(0, 4).map((r) => {
-          const total = formatAssets(r.totalAssets);
-          const exited = formatAssets(r.exitedAssets);
+          const total = formatNative(r.totalAssets, { mode: "compact" });
+          const exited = formatNative(r.exitedAssets, { mode: "compact" });
           const progressBp = r.totalAssets > 0n
             ? Number((r.exitedAssets * 10_000n) / r.totalAssets) / 100
             : 0;

@@ -350,6 +350,160 @@ export function weiToNumber(wei: bigint, decimals = 18): number {
   return parseFloat(s);
 }
 
+// ── formatNative — adaptive native-asset display ─────────────────────────────
+//
+// Single entry point for display-side ETH/GNO formatting. Adapts decimal
+// precision and (optionally) k/M abbreviation based on magnitude so:
+//   - Whale numbers like 27,324.8184 collapse to "27,324.82" (hero) and
+//     stop colliding with adjacent grid cells
+//   - Sub-ETH dust stakers still see real digits (no premature "<0.01" on a
+//     0.0234 ETH stake)
+//   - Per-day projections in the rate mode keep 4-5 dp because they're
+//     intrinsically small
+//   - The CSV export keeps the existing 8 fixed dp via mode:'csv' — DO NOT
+//     migrate the CSV route to any other mode
+//
+// CSV precision is load-bearing for tax reporting. Mode 'csv' delegates to
+// the legacy formatAssets(wei, decimals, 8) shape with all separators and
+// trimming disabled. Any future change to the CSV route MUST keep this.
+
+export type NativeFmtMode = "hero" | "compact" | "precise" | "rate" | "csv";
+
+interface NativeFmtOpts {
+  mode?: NativeFmtMode;
+  decimals?: number;
+  zeroPlaceholder?: string;
+}
+
+// Build a tiered table: [magnitude_threshold, maxFractionDigits, suffix].
+// Magnitude is checked from high to low; the first matching tier applies.
+const TIERS: Record<NativeFmtMode, Array<{ min: number; dp: number; suffix?: "k" | "M" | "B" }>> = {
+  hero: [
+    { min: 1_000_000, dp: 2, suffix: "M" },
+    { min: 100_000, dp: 1, suffix: "k" },
+    { min: 10_000, dp: 2 },
+    { min: 1_000, dp: 2 },
+    { min: 100, dp: 2 },
+    { min: 10, dp: 3 },
+    { min: 1, dp: 4 },
+    { min: 0.01, dp: 4 },
+    { min: 0, dp: 4 }, // < 0.01 handled as "<0.01" below
+  ],
+  compact: [
+    { min: 100_000, dp: 2 },
+    { min: 10_000, dp: 2 },
+    { min: 1_000, dp: 3 },
+    { min: 100, dp: 3 },
+    { min: 10, dp: 4 },
+    { min: 1, dp: 4 },
+    { min: 0.01, dp: 4 },
+    { min: 0, dp: 4 },
+  ],
+  precise: [
+    { min: 1_000, dp: 4 },
+    { min: 100, dp: 4 },
+    { min: 10, dp: 4 },
+    { min: 1, dp: 5 },
+    { min: 0.01, dp: 5 },
+    { min: 0.0001, dp: 6 },
+    { min: 0, dp: 4 }, // < 0.0001 -> "<0.0001"
+  ],
+  rate: [
+    { min: 100, dp: 3 },
+    { min: 10, dp: 4 },
+    { min: 1, dp: 5 },
+    { min: 0.01, dp: 5 },
+    { min: 0.0001, dp: 6 },
+    { min: 0, dp: 4 },
+  ],
+  csv: [{ min: 0, dp: 8 }],
+};
+
+// Round a wei amount to `dp` decimal places, returning a new bigint at the
+// original `decimals` precision. So 27324.8184 with dp=2 → 27324.82 (i.e.
+// 27324820000000000000n at 18 decimals). Used inside formatNative so display
+// values are rounded, not truncated — matches what every other dashboard
+// (Etherscan, Aave, Rabby) does and stops the "27,324.81" off-by-one.
+function roundWei(wei: bigint, decimals: number, dp: number): bigint {
+  if (dp >= decimals) return wei;
+  const sign = wei < 0n ? -1n : 1n;
+  const abs = wei < 0n ? -wei : wei;
+  const factor = 10n ** BigInt(decimals - dp);
+  const halfStep = factor / 2n;
+  const rounded = ((abs + halfStep) / factor) * factor;
+  return sign * rounded;
+}
+
+// Render an integer + fractional bigint pair as "12,345.6789" with optional
+// commas and either trim trailing zeros (display) or fixed-width pad (CSV).
+function renderDigits(wei: bigint, decimals: number, dp: number, opts: { commas: boolean; fixed: boolean }): string {
+  if (wei === 0n) return opts.fixed && dp > 0 ? `0.${"0".repeat(dp)}` : "0";
+  const sign = wei < 0n ? "-" : "";
+  const abs = wei < 0n ? -wei : wei;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const frac = abs % base;
+  const wholeStr = opts.commas ? whole.toLocaleString("en-US") : whole.toString();
+  if (dp === 0) return `${sign}${wholeStr}`;
+  let fracStr = frac.toString().padStart(decimals, "0").slice(0, dp);
+  if (!opts.fixed) {
+    fracStr = fracStr.replace(/0+$/, "");
+    if (!fracStr) return `${sign}${wholeStr}`;
+  }
+  return `${sign}${wholeStr}.${fracStr}`;
+}
+
+export function formatNative(wei: bigint, opts: NativeFmtOpts = {}): string {
+  const { mode = "compact", decimals = 18, zeroPlaceholder } = opts;
+  if (typeof wei !== "bigint") return "—";
+  if (wei === 0n) return zeroPlaceholder ?? "0";
+
+  // CSV mode is special: fixed 8dp, NO commas, NO trimming, NO abbreviation.
+  // The CSV must be machine-parseable, so a stray comma in a cell would
+  // wreck downstream tax tooling.
+  if (mode === "csv") {
+    const rounded = roundWei(wei, decimals, 8);
+    return renderDigits(rounded, decimals, 8, { commas: false, fixed: true });
+  }
+
+  const sign = wei < 0n ? "-" : "";
+  const abs = wei < 0n ? -wei : wei;
+  const wholePart = Number(abs / 10n ** BigInt(decimals));
+  const fracMag = wholePart === 0 ? Number(abs) / 10 ** decimals : wholePart;
+
+  const tiers = TIERS[mode];
+  let chosen = tiers[tiers.length - 1];
+  for (const t of tiers) {
+    if (fracMag >= t.min) {
+      chosen = t;
+      break;
+    }
+  }
+
+  // Sub-threshold tiny non-zero → render a less-than marker so the cell
+  // doesn't visually round to zero.
+  if (chosen.min === 0 && fracMag > 0 && fracMag < 0.01 && (mode === "hero" || mode === "compact")) {
+    return `${sign}<0.01`;
+  }
+  if (chosen.min === 0 && fracMag > 0 && fracMag < 0.0001 && (mode === "precise" || mode === "rate")) {
+    return `${sign}<0.0001`;
+  }
+
+  // Abbreviated tiers: divide and append the suffix. Inputs at this point
+  // are >= 100k native units which still fit comfortably in IEEE-754.
+  if (chosen.suffix) {
+    const divisor = chosen.suffix === "M" ? 1_000_000 : chosen.suffix === "B" ? 1_000_000_000 : 1_000;
+    const n = Number(abs) / 10 ** decimals / divisor;
+    return `${sign}${n.toFixed(chosen.dp).replace(/\.?0+$/, "")}${chosen.suffix}`;
+  }
+
+  // Standard render — round to the tier's max fraction digits, then comma-
+  // group with trailing-zero trim. Rounding (not truncating) is the right
+  // behavior for "what does this number look like at this precision."
+  const rounded = roundWei(wei, decimals, chosen.dp);
+  return renderDigits(rounded, decimals, chosen.dp, { commas: true, fixed: false });
+}
+
 // ── Calendar-year earnings (CSV export) ──────────────────────────────────────
 //
 // AllocatorSnapshot.earnedAssets is per-period (one day's rewards), NOT a

@@ -1,4 +1,4 @@
-import { ExitRequest, Network, VaultPosition, formatAssets, nativeSymbol } from "@/lib/stakewise";
+import { ExitRequest, Network, VaultPosition, formatNative, nativeSymbol } from "@/lib/stakewise";
 
 interface BannerExit extends ExitRequest {
   network: Network;
@@ -73,14 +73,14 @@ export function WithdrawalBanner({ positions }: { positions: VaultPosition[] }) 
             {Array.from(claimSum.entries()).map(([net, wei]) => (
               <span key={`c-${net}`} className="mr-3">
                 <span className="text-accent2">Claimable: </span>
-                {formatAssets(wei)} {nativeSymbol(net)}
+                {formatNative(wei, { mode: "compact" })} {nativeSymbol(net)}
                 <span className="text-dim"> ({net})</span>
               </span>
             ))}
             {Array.from(pendSum.entries()).map(([net, wei]) => (
               <span key={`p-${net}`} className="mr-3">
                 <span className="text-warn">Pending: </span>
-                {formatAssets(wei)} {nativeSymbol(net)}
+                {formatNative(wei, { mode: "compact" })} {nativeSymbol(net)}
                 <span className="text-dim"> ({net})</span>
               </span>
             ))}
